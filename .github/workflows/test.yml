@@ -1,0 +1,32 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check syntax
+        run: npm run check:syntax
+
+      - name: Run isolated self-test
+        run: npm test
+
+      - name: Test the batch launcher
+        shell: cmd
+        run: Repair-ChatGPT.cmd --self-test

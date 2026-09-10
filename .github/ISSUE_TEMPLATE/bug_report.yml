@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a case where the ChatGPT window is still not showing
+title: "[Window not showing]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the project. Never post credentials or an unredacted repair log. Logs can contain your Windows username and local paths.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed usernames, private paths, tokens, cookies, and other sensitive data.
+          required: true
+        - label: I did not attach OpenAI executables, DLLs, app.asar, or copied runtime files.
+          required: true
+
+  - type: input
+    id: helper-version
+    attributes:
+      label: Helper version
+      description: Run `node Repair-ChatGPT-Windows.mjs --version`.
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Formal app version
+      placeholder: 26.x.x.x
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Windows architecture
+      options:
+        - x64
+        - ARM64
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Explain what you ran, what happened, and what you expected.
+    validations:
+      required: true
+
+  - type: textarea
+    id: check-output
+    attributes:
+      label: Redacted check output
+      description: Optional output from `Repair-ChatGPT.cmd --check`. Redact all personal paths first.
+      render: text

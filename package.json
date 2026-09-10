@@ -1,0 +1,17 @@
+{
+  "name": "chatgpt-codex-windows-repair",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unofficial repair helper for the ChatGPT Windows app running without a visible window",
+  "type": "module",
+  "scripts": {
+    "check:syntax": "node --check Repair-ChatGPT-Windows.mjs",
+    "test": "npm run test:cli && npm run test:self",
+    "test:cli": "node tests/cli.test.mjs",
+    "test:self": "node Repair-ChatGPT-Windows.mjs --self-test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

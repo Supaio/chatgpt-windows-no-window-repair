@@ -1,0 +1,18 @@
+# Local repair output can reveal usernames and filesystem paths.
+*.log
+
+# Never commit copied or extracted application artifacts.
+*.exe
+*.dll
+*.asar
+cua_node/
+.repair-*
+*.broken-*
+
+# Development artifacts.
+node_modules/
+coverage/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
