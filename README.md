@@ -1,117 +1,117 @@
-# Fix ChatGPT Windows App Not Showing a Window
+# 修复 ChatGPT Windows 界面不显示问题
 
-[简体中文](README.zh-CN.md)
+[English](README.en.md)
 
-**An unofficial, source-available Windows repair helper for a specific ChatGPT/Codex desktop-app failure: background processes start after an update, but no window appears.**
+**这是一个非官方、源码公开的 Windows 修复工具，用于处理 ChatGPT/Codex Windows 正式版升级后“后台有进程，但界面不显示”的问题。**
 
-The helper reconstructs incomplete local runtime copies outside `WindowsApps`, preserves a usable external `CODEX_CLI_PATH`, and relaunches only the formal app. It does not bundle or download OpenAI executables.
+它会在 `WindowsApps` 之外安全重建不完整的本地运行环境，保留仍可用的外置 `CODEX_CLI_PATH`，并且只重启正式版。仓库不包含、也不会从网络下载任何 OpenAI 可执行文件。
 
 > [!IMPORTANT]
-> **I personally encountered and reproduced this problem on my Windows x64 computer. I tested this script during two real app updates; it ran correctly and successfully restored the ChatGPT window. The latest formal app version tested was `26.903.9818.0`.**
+> **我已经在自己的 Windows x64 电脑上亲自遇到并复现了这个问题。本脚本经过两次真实升级测试，运行正常并成功恢复了 ChatGPT 界面；最近一次测试的正式版版本是 `26.903.9818.0`。**
 >
-> **If it does not fix your machine, please [open a Bug Report issue](../../issues/new?template=bug_report.yml) with redacted check output or logs. I will help investigate the case with you and improve the script where possible.**
+> **如果你下载后仍未修好，请[提交 Bug Report Issue](../../issues/new?template=bug_report.yml)。请附上脱敏后的检查结果或日志，我会和你一起继续定位问题，并尽力完善脚本。**
 
 > [!WARNING]
-> This project relies on internal desktop-app file layout that is not a public compatibility contract. Review the source, use `--check` first, and expect future app updates to require changes here.
+> 本项目依赖桌面应用的内部文件布局，而这不是公开的兼容性承诺。建议先审阅源码并运行 `--check`。未来应用更新可能需要同步修改本工具。
 
-## Why background processes can run without a visible window
+## 为什么会出现“后台有进程，但界面不显示”
 
-**Based on direct inspection and repair logs from two real update failures, the immediate cause on my machine was that required runtime files were not completely relocated or initialized in a local directory executable by the current Windows user. The UI startup chain then stalled after the background processes had started.**
+**根据我对两次真实升级故障的现场检查和修复日志，直接原因是：升级后应用依赖的运行文件没有完整搬运或初始化到当前 Windows 用户可执行的本地目录，导致界面启动链停在后台进程阶段。**
 
-The Microsoft Store installation lives under the protected `C:\Program Files\WindowsApps` tree. At startup, ChatGPT/Codex also uses version-specific local runtimes under `%LOCALAPPDATA%\OpenAI\Codex`. In the two failures I encountered:
+ChatGPT/Codex 的 Microsoft Store 安装文件位于受保护的 `C:\Program Files\WindowsApps`，启动时还会使用 `%LOCALAPPDATA%\OpenAI\Codex` 下按版本生成的本地运行环境。在我遇到的两次故障中：
 
-1. The first involved access to or execution of the bundled Codex CLI. A persistent, valid external `CODEX_CLI_PATH` restored the app.
-2. A later update left the CUA Node runtime incomplete. For formal app version `26.903.9818.0`, the script rebuilt and verified a runtime containing 4,052 files and 261,658,315 bytes; the window appeared again after relaunch.
+1. 第一次故障涉及应用内置 Codex CLI 的读取或执行，设置一个持久、有效的外置 `CODEX_CLI_PATH` 后恢复。
+2. 后续升级又留下了不完整的 CUA Node 运行环境。脚本为正式版 `26.903.9818.0` 重新构建并核验了包含 4,052 个文件、共 261,658,315 字节的运行目录，重启后界面恢复显示。
 
-This evidence indicates that the app's background host processes can start before all Codex CLI or CUA Node dependencies are ready. If dependency initialization cannot finish, the result can be processes in Task Manager but no desktop window. This causal diagnosis is based on before-and-after file state, repair logs, and the successful recovery.
+这说明应用的后台进程本身可以先启动，但如果 Codex CLI 或 CUA Node 等依赖没有准备完整，后续初始化就可能无法完成，最终表现为任务管理器中有进程、桌面上却没有窗口。这里的因果判断来自修复前后的文件状态、脚本日志和恢复结果。
 
-The [official OpenAI Windows app documentation](https://learn.chatgpt.com/zh-Hans/docs/windows/windows-app) describes the native Windows app, and the [official troubleshooting guide](https://learn.chatgpt.com/zh-Hans/docs/reference/troubleshooting) notes that the desktop app and CLI can bundle different Codex versions. **OpenAI has not documented the exact failure described here as a universal cause, so the explanation above is this project's evidence-based diagnosis of the tested machines.**
+[OpenAI 官方 Windows 应用文档](https://learn.chatgpt.com/zh-Hans/docs/windows/windows-app)介绍了 Windows 原生应用；[官方故障排除说明](https://learn.chatgpt.com/zh-Hans/docs/reference/troubleshooting)也指出桌面应用与 CLI 可能捆绑不同版本的 Codex。**但 OpenAI 官方目前没有把这里描述的具体故障原因公布为适用于所有用户的统一结论，因此上面的说明是本项目基于实机证据作出的诊断。**
 
-**The same “processes but no window” symptom can have other causes. This helper targets the specific class of failures where runtime relocation or staging is incomplete after an update.**
+**相同的“后台有进程但界面不显示”现象也可能由其他原因造成。本工具只针对“更新后运行文件搬运或落盘不完整”这一类故障。**
 
-**Resetting `config.toml` can help with a different class of configuration corruption. It was not the cause in either tested case, so this script does not reset your configuration.**
+**重置 `config.toml` 适用于另一类配置损坏问题；在本项目的两次实测中，它不是根因，因此脚本不会重置你的配置。**
 
-## Requirements
+## 使用条件
 
-- Windows with the formal `OpenAI.Codex` AppX package installed
-- Node.js 18 or newer available on `PATH`
-- No administrator privileges
+- Windows 已安装正式版 `OpenAI.Codex` AppX 应用
+- `PATH` 中存在 Node.js 18 或更高版本
+- 不需要管理员权限
 
-The full repair flow was validated on x64 formal app versions `26.903.8094.0` and `26.903.9818.0`. ARM64 package discovery is implemented but has not been tested.
+完整修复流程已在 x64 正式版 `26.903.8094.0` 和 `26.903.9818.0` 上实机验证。代码包含 ARM64 包识别逻辑，但尚未实机测试。
 
-## Quick start
+## 快速使用
 
-1. Download or clone this repository.
-2. Run a read-only check:
+1. 下载或克隆本仓库。
+2. 先执行只读检查：
 
    ```powershell
    .\Repair-ChatGPT.cmd --check
    ```
 
-3. If repair is required, double-click `Repair-ChatGPT.cmd`, or run:
+3. 如果提示需要修复，双击 `Repair-ChatGPT.cmd`，或运行：
 
    ```powershell
    .\Repair-ChatGPT.cmd
    ```
 
-4. Keep the console open until it reports `Operation completed.`
+4. 请等待控制台显示 `Operation completed.` 后再关闭窗口。
 
-Run it as your normal Windows user. Do not select **Run as administrator**, because a different Windows account could receive the per-user environment-variable change.
+请使用日常登录的 Windows 账户正常运行，不要选择“以管理员身份运行”，否则每用户环境变量可能被写入另一个 Windows 账户。
 
-Repairing a new app version may copy roughly 250–700 MB and can take several minutes.
+第一次处理某个新版本时，可能需要复制约 250–700 MB，耗时可能达到数分钟。
 
-## What it does
+## 它会做什么
 
-- Selects the exact formal package name `OpenAI.Codex`; it does not select Beta.
-- Calculates the runtime directory ID from the files bundled with the installed app.
-- Detects missing or incomplete CUA runtime files before rebuilding the runtime.
-- Verifies every copied file size and the SHA-256 of key runtime files.
-- Preserves a usable external `CODEX_CLI_PATH`.
-- If that path is absent, invalid, or points to an outdated helper-managed engine, copies the current app-bundled Codex engine into `%LOCALAPPDATA%\OpenAI\Codex\bin` and persists the new per-user path.
-- Stops only formal-app processes whose executable path belongs to the detected package, then relaunches the formal app.
+- 只选择包名完全等于 `OpenAI.Codex` 的正式版，不会选择 Beta。
+- 根据当前安装包自带文件计算运行目录编号，不写死应用版本号。
+- 检测 CUA 运行环境是否缺失或不完整，仅在需要时重建。
+- 核验所有复制文件的大小，以及关键运行文件的 SHA-256。
+- 保留仍然有效的外置 `CODEX_CLI_PATH`。
+- 当该路径缺失、失效，或指向工具管理的过期引擎时，将应用自带 Codex 引擎复制到 `%LOCALAPPDATA%\OpenAI\Codex\bin`，并保存新的每用户路径。
+- 只关闭可执行文件路径属于所检测正式包的进程，然后重新启动正式版。
 
-## What it does not do
+## 它不会做什么
 
-- It does not access the network.
-- It does not reset `config.toml`.
-- It does not modify accounts, projects, plugins, or conversation data.
-- It does not stop Beta or write into the Beta installation directory.
-- It does not silently delete an incomplete runtime. Such a directory is renamed with a `.broken-*` suffix for recovery and diagnosis.
+- 不联网。
+- 不重置 `config.toml`。
+- 不修改账号、项目、插件或对话数据。
+- 不关闭 Beta，也不写入 Beta 安装目录。
+- 不会静默删除不完整的运行目录；旧目录会被改名为 `.broken-*`，以便恢复和排查。
 
-## Commands
+## 可用命令
 
 ```text
-Repair-ChatGPT.cmd                 Repair and relaunch
-Repair-ChatGPT.cmd --check         Read-only environment check
-Repair-ChatGPT.cmd --no-launch     Repair without relaunching
+Repair-ChatGPT.cmd                 修复并重新启动
+Repair-ChatGPT.cmd --check         只读检查
+Repair-ChatGPT.cmd --no-launch     修复但不重新启动
 node Repair-ChatGPT-Windows.mjs --self-test
 node Repair-ChatGPT-Windows.mjs --help
 node Repair-ChatGPT-Windows.mjs --version
 ```
 
-`--install-root=PATH` and `--cli-path=PATH` are development overrides used for fixture and package checks.
+`--install-root=PATH` 和 `--cli-path=PATH` 是用于夹具测试及安装包检查的开发参数。
 
-## Logs and privacy
+## 日志与隐私
 
-The helper writes `Repair-ChatGPT-Windows.log` beside the scripts. Logs can contain your Windows username and local file paths. Log files are ignored by Git, but you should still redact personal paths before attaching a log to an issue.
+工具会在脚本旁边生成 `Repair-ChatGPT-Windows.log`。日志可能包含 Windows 用户名和本机路径。Git 已默认忽略日志文件，但在把日志附到 Issue 前，仍应手动隐去个人路径。
 
-The helper never reads or prints API keys, access tokens, cookies, passwords, or ChatGPT account data.
+工具不会读取或输出 API Key、访问令牌、Cookie、密码或 ChatGPT 账号数据。
 
-## Development
+## 开发与验证
 
-No npm dependencies are required.
+本项目没有 npm 依赖。
 
 ```powershell
 npm run check:syntax
 npm test
 ```
 
-The self-test uses only a newly created operating-system temporary directory and verifies hashing, buffered copying, directory checks, and atomic activation. It does not inspect or modify the installed app.
+自测只使用操作系统中新建的临时目录，验证哈希、分块复制、目录核验和原子启用；不会检查或修改已经安装的应用。
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before reporting or submitting changes. Never commit OpenAI binaries, an extracted `app.asar`, copied CUA files, or private logs.
+报告问题或提交修改前，请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [SECURITY.md](SECURITY.md)。严禁提交 OpenAI 二进制文件、解包的 `app.asar`、复制出来的 CUA 文件或私人日志。
 
-## License and disclaimer
+## 许可证与免责声明
 
-The original code in this repository is licensed under the [MIT License](LICENSE).
+本仓库的原创代码采用 [MIT License](LICENSE)。
 
-This is an independent community project. It is not affiliated with, endorsed by, or supported by OpenAI. OpenAI, ChatGPT, and Codex are trademarks of their respective owner. This repository contains no OpenAI application binaries or application source code.
+这是一个独立社区项目，与 OpenAI 没有隶属、背书或支持关系。OpenAI、ChatGPT 和 Codex 是其各自权利人的商标。本仓库不包含 OpenAI 应用二进制文件或应用源代码。
