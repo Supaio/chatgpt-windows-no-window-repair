@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.1.1 - 2026-10-03
+
+- Relaunch the formal app through its registered `shell:AppsFolder` entry instead of starting the versioned executable directly.
+- Detect and remove only a stale per-user `ChatGPT.lnk` that targets a missing older `OpenAI.Codex` package version.
+- Keep read-only checks non-mutating while reporting a stale shortcut as repairable.
+
 ## 0.1.0 - 2026-09-11
 
 - Added automatic discovery of the formal `OpenAI.Codex` AppX package.

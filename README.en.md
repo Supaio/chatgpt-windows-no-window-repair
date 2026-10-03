@@ -68,7 +68,8 @@ Repairing a new app version may copy roughly 250–700 MB and can take several m
 - Verifies every copied file size and the SHA-256 of key runtime files.
 - Preserves a usable external `CODEX_CLI_PATH`.
 - If that path is absent, invalid, or points to an outdated helper-managed engine, copies the current app-bundled Codex engine into `%LOCALAPPDATA%\OpenAI\Codex\bin` and persists the new per-user path.
-- Stops only formal-app processes whose executable path belongs to the detected package, then relaunches the formal app.
+- Stops only formal-app processes whose executable path belongs to the detected package, then relaunches through the registered `shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App` entry instead of directly starting a versioned executable.
+- Checks the Start menu `ChatGPT.lnk` and removes it only when its app ID belongs to the formal app and its target is a missing older `OpenAI.Codex` package version.
 
 ## What it does not do
 
@@ -76,6 +77,7 @@ Repairing a new app version may copy roughly 250–700 MB and can take several m
 - It does not reset `config.toml`.
 - It does not modify accounts, projects, plugins, or conversation data.
 - It does not stop Beta or write into the Beta installation directory.
+- It does not remove Beta, current-version, still-valid, or unrecognized shortcuts; `--check` only reports a stale shortcut without deleting it.
 - It does not silently delete an incomplete runtime. Such a directory is renamed with a `.broken-*` suffix for recovery and diagnosis.
 
 ## Commands

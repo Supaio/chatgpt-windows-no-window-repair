@@ -7,7 +7,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const toolVersion = "0.1.0";
+const toolVersion = "0.1.1";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const logPath = path.join(scriptDirectory, "Repair-ChatGPT-Windows.log");
 const buffer = Buffer.allocUnsafe(1024 * 1024);
@@ -230,6 +230,125 @@ function getFormalPackage() {
     fail("The formal app installation directory does not exist.");
   }
   return packageInfo;
+}
+
+function formalAppShellTarget(packageInfo) {
+  const packageFamilyName = String(packageInfo?.PackageFamilyName || "").trim();
+  if (!/^OpenAI\.Codex_[a-z0-9]+$/iu.test(packageFamilyName)) {
+    fail(`The formal app package family name is invalid: ${packageFamilyName || "missing"}`);
+  }
+  return `shell:AppsFolder\\${packageFamilyName}!App`;
+}
+
+function classifyFormalStartMenuShortcut({
+  appUserModelId,
+  currentInstallRoot,
+  targetExists,
+  targetPath,
+}) {
+  if (
+    String(appUserModelId || "").trim().toLowerCase() !== "com.openai.codex" ||
+    typeof currentInstallRoot !== "string" ||
+    !currentInstallRoot.trim() ||
+    typeof targetPath !== "string" ||
+    !targetPath.trim()
+  ) {
+    return "unrecognized";
+  }
+
+  const normalizedTarget = path.win32.normalize(targetPath.trim());
+  const formalVersionTarget =
+    /\\WindowsApps\\OpenAI\.Codex_[^\\]+_(?:x64|arm64|x86)__[a-z0-9]+\\app\\ChatGPT\.exe$/iu;
+  if (!formalVersionTarget.test(normalizedTarget)) return "unrecognized";
+
+  const normalizedRoot = path.win32.normalize(currentInstallRoot.trim());
+  const relative = path.win32.relative(normalizedRoot, normalizedTarget);
+  const belongsToCurrentInstall =
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.win32.sep}`) &&
+    !path.win32.isAbsolute(relative);
+  if (belongsToCurrentInstall) return "current-formal";
+  return targetExists ? "installed-formal" : "stale-formal";
+}
+
+function inspectFormalStartMenuShortcut(packageInfo) {
+  const command = [
+    "$startMenu = [Environment]::GetFolderPath([Environment+SpecialFolder]::StartMenu)",
+    "$shortcutPath = Join-Path $startMenu 'Programs\\ChatGPT.lnk'",
+    "if (-not (Test-Path -LiteralPath $shortcutPath -PathType Leaf)) {",
+    "  [pscustomobject]@{ Exists = $false } | ConvertTo-Json -Compress",
+    "  exit 0",
+    "}",
+    "$targetPath = ''",
+    "$appUserModelId = ''",
+    "try {",
+    "  $wsh = New-Object -ComObject WScript.Shell",
+    "  $targetPath = [string]$wsh.CreateShortcut($shortcutPath).TargetPath",
+    "} catch {}",
+    "try {",
+    "  $shell = New-Object -ComObject Shell.Application",
+    "  $folder = $shell.Namespace([IO.Path]::GetDirectoryName($shortcutPath))",
+    "  $item = $folder.ParseName([IO.Path]::GetFileName($shortcutPath))",
+    "  if ($null -ne $item) {",
+    "    $appUserModelId = [string]$item.ExtendedProperty('System.AppUserModel.ID')",
+    "  }",
+    "} catch {}",
+    "$targetExists = $false",
+    "if ($targetPath) { $targetExists = Test-Path -LiteralPath $targetPath -PathType Leaf }",
+    "[pscustomobject]@{",
+    "  Exists = $true",
+    "  ShortcutPath = $shortcutPath",
+    "  TargetPath = $targetPath",
+    "  AppUserModelId = $appUserModelId",
+    "  TargetExists = $targetExists",
+    "} | ConvertTo-Json -Compress",
+  ].join(os.EOL);
+  const result = runPowerShell(command, {}, true);
+  if (result.status !== 0) return { classification: "inspection-failed" };
+
+  try {
+    const output = (result.stdout || "").trim();
+    const jsonStart = output.indexOf("{");
+    if (jsonStart < 0) return { classification: "inspection-failed" };
+    const shortcut = JSON.parse(output.slice(jsonStart));
+    if (!shortcut.Exists) return { classification: "absent" };
+    return {
+      classification: classifyFormalStartMenuShortcut({
+        appUserModelId: shortcut.AppUserModelId,
+        currentInstallRoot: packageInfo.InstallLocation,
+        targetExists: shortcut.TargetExists === true,
+        targetPath: shortcut.TargetPath,
+      }),
+      shortcutPath: shortcut.ShortcutPath,
+      targetPath: shortcut.TargetPath,
+    };
+  } catch {
+    return { classification: "inspection-failed" };
+  }
+}
+
+function reconcileFormalStartMenuShortcut(packageInfo, readOnly) {
+  const shortcut = inspectFormalStartMenuShortcut(packageInfo);
+  if (shortcut.classification === "inspection-failed") {
+    log("The Start menu shortcut could not be inspected; repair will continue without changing it.");
+    return false;
+  }
+  if (shortcut.classification !== "stale-formal") return false;
+
+  if (readOnly) {
+    log(`Read-only check found a stale formal-app shortcut: ${shortcut.shortcutPath}`);
+    return true;
+  }
+
+  try {
+    fs.unlinkSync(shortcut.shortcutPath);
+    log(`Removed a stale formal-app shortcut that targeted a missing old version: ${shortcut.shortcutPath}`);
+    return false;
+  } catch (error) {
+    log(`The stale formal-app shortcut could not be removed: ${error.message}`);
+    return true;
+  }
 }
 
 function isInside(parent, candidate) {
@@ -550,25 +669,14 @@ async function launchFormalApp(packageInfo, cliPath) {
   if (!fs.existsSync(appExecutable)) fail(`The formal app executable was not found: ${appExecutable}`);
 
   const environment = { ...process.env, CODEX_CLI_PATH: cliPath };
-  const directLaunch = await spawnDetached(appExecutable, [], {
+  const shellTarget = formalAppShellTarget(packageInfo);
+  log(`Launching the formal app through its registered Windows app entry: ${shellTarget}`);
+  const appLaunch = await spawnDetached("explorer.exe", [shellTarget], {
     env: environment,
     windowsHide: false,
   });
-  if (!directLaunch.started) {
-    log(`Direct launch failed; trying the Windows app entry point: ${directLaunch.error.message}`);
-  }
-
-  await sleep(3500);
-  if (formalProcessCount(packageInfo.InstallLocation) === 0) {
-    const appId = `${packageInfo.PackageFamilyName}!App`;
-    const fallbackLaunch = await spawnDetached(
-      "explorer.exe",
-      [`shell:AppsFolder\\${appId}`],
-      { env: environment, windowsHide: false },
-    );
-    if (!fallbackLaunch.started) {
-      fail(`The Windows app entry point failed: ${fallbackLaunch.error.message}`);
-    }
+  if (!appLaunch.started) {
+    fail(`The Windows app entry point failed: ${appLaunch.error.message}`);
   }
 
   let highestProcessCount = 0;
@@ -695,6 +803,10 @@ async function main() {
 
   if (!fs.existsSync(cuaSourceRoot)) fail(`The formal app does not contain CUA resources: ${cuaSourceRoot}`);
   log(`Formal app version: ${packageInfo.Version}`);
+  const staleShortcutNeedsCleanup = reconcileFormalStartMenuShortcut(
+    packageInfo,
+    checkOnly,
+  );
 
   const runtimeBundle = analyzeBundle(cuaSourceRoot, [
     "manifest.json",
@@ -735,7 +847,11 @@ async function main() {
   );
 
   if (checkOnly) {
-    if (runtimeReady && (configuredCliReady || packagedCoreReady)) {
+    if (
+      runtimeReady &&
+      (configuredCliReady || packagedCoreReady) &&
+      !staleShortcutNeedsCleanup
+    ) {
       log("Check passed: the environment is ready to launch.");
       return;
     }
@@ -796,4 +912,11 @@ if (isDirectRun) {
   });
 }
 
-export { helpText, parseArguments, toolVersion, validateArguments };
+export {
+  classifyFormalStartMenuShortcut,
+  formalAppShellTarget,
+  helpText,
+  parseArguments,
+  toolVersion,
+  validateArguments,
+};

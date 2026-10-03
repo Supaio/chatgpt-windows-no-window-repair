@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-codex-windows-repair",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Unofficial repair helper for the ChatGPT Windows app running without a visible window",
   "type": "module",

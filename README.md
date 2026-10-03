@@ -68,7 +68,8 @@ ChatGPT/Codex 的 Microsoft Store 安装文件位于受保护的 `C:\Program Fil
 - 核验所有复制文件的大小，以及关键运行文件的 SHA-256。
 - 保留仍然有效的外置 `CODEX_CLI_PATH`。
 - 当该路径缺失、失效，或指向工具管理的过期引擎时，将应用自带 Codex 引擎复制到 `%LOCALAPPDATA%\OpenAI\Codex\bin`，并保存新的每用户路径。
-- 只关闭可执行文件路径属于所检测正式包的进程，然后重新启动正式版。
+- 只关闭可执行文件路径属于所检测正式包的进程，然后优先通过已注册的 `shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App` 入口重新启动正式版，不再直接启动带版本号目录中的 EXE。
+- 自动检查开始菜单中的 `ChatGPT.lnk`；仅当它的应用 ID 属于正式版、指向已不存在的旧 `OpenAI.Codex` 版本时才删除。
 
 ## 它不会做什么
 
@@ -76,6 +77,7 @@ ChatGPT/Codex 的 Microsoft Store 安装文件位于受保护的 `C:\Program Fil
 - 不重置 `config.toml`。
 - 不修改账号、项目、插件或对话数据。
 - 不关闭 Beta，也不写入 Beta 安装目录。
+- 不删除 Beta、当前版本、目标仍存在或无法确认归属的快捷方式；`--check` 也只报告，不执行删除。
 - 不会静默删除不完整的运行目录；旧目录会被改名为 `.broken-*`，以便恢复和排查。
 
 ## 可用命令
